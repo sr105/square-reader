@@ -2,7 +2,16 @@
 
 import audioop
 from collections import deque
+from contextlib import suppress
+import logging
 import pyaudio
+
+
+logging.basicConfig()
+logging.getLogger().setLevel("DEBUG")
+
+logger = logging.getLogger(__name__)
+
 
 THRESHOLD_FACTOR = 3.5
 FIRST_PEAK_FACTOR = 0.8
@@ -60,11 +69,11 @@ def get_swipe(audio):
         data, power = get_chunk(audio, bias)
 
         baseline = sum(baselines) / len(baselines) * THRESHOLD_FACTOR
-        print(power, baseline, power / (baseline or 1))
+        logging.debug((power, baseline, power / (baseline or 1)))
 
         chunks = []
         while power > baseline:
-            print(power, baseline, power / (baseline or 1), "*")
+            logging.debug((power, baseline, power / (baseline or 1), "*"))
             chunks.append(data)
             data, power = get_chunk(audio, bias)
 
@@ -157,6 +166,7 @@ def bcd_chr(byte):
 
 def get_bcd_chars(bytes):
     bytes = list(bytes)
+    logging.debug(bytes)
 
     if bcd_chr(bytes[0]) != ";":
         # Try reversed
@@ -204,14 +214,32 @@ def get_data_from_osx():
 
 
 def get_data_from_wav_file(filename="output.wav"):
-    with open("capitalone.pcm", "rb") as f:
-        return f.read()
+    import wave
+
+    with wave.open(filename, "rb") as wf:
+        logging.info(wf.getparams())
+        return wf.readframes(wf.getnframes())
+
+    # PCM
+    # TODO: read as two-byte signed 16-bit LE
+    # with open("capitalone.pcm", "rb") as f:
+    #     return f.read()
+
+
+def get_data():
+    import sys
+
+    if len(sys.argv) > 1:
+        return get_data_from_wav_file(sys.argv[1])
+
+    with suppress(Exception):
+        return get_data_from_linux()
+
+    return get_data_from_osx()
 
 
 if __name__ == "__main__":
-    # data = get_data_from_linux()
-    data = get_data_from_osx()
-    # data = get_data_from_wav_file()
+    data = get_data()
     peaks = list(get_peaks(data))
     bits = list(get_bits(peaks))
     bytes = list(get_bytes(bits))
