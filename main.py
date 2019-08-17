@@ -27,7 +27,7 @@ def get_oss_audio_device(dev="/dev/audio"):
         audio.setparameters(ossaudiodev.AFMT_S16_LE, 1, 44100)
         return audio
     except Exception:
-        raise RuntimeError("Failed to open OSS audio device.")
+        raise DecodeError("Failed to open OSS audio device.")
 
 
 class OsxAudio:
@@ -148,6 +148,8 @@ def get_bits(peaks):
 
 def get_bytes(bits, width=5):
     bits = list(bits)
+    if not bits:
+        raise DecodeError("No bits were found. Bad swipe or microphone level is wrong?")
 
     # Discard leading 0s
     while bits[0] == 0:
@@ -238,12 +240,16 @@ def get_data():
     return get_data_from_osx()
 
 
-if __name__ == "__main__":
+def read_card():
     data = get_data()
-    peaks = list(get_peaks(data))
-    bits = list(get_bits(peaks))
-    bytes = list(get_bytes(bits))
     try:
+        peaks = list(get_peaks(data))
+        bits = list(get_bits(peaks))
+        bytes = list(get_bytes(bits))
         print("".join(get_bcd_chars(bytes)))
     except DecodeError as e:
         print(e)
+
+
+if __name__ == "__main__":
+    read_card()
