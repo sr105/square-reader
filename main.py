@@ -4,6 +4,7 @@ import audioop
 from collections import deque
 from contextlib import suppress
 import logging
+from pprint import pprint
 import pyaudio
 
 
@@ -124,6 +125,7 @@ def get_peaks(data):
 
 def get_bits(peaks):
     peaks = list(peaks)
+    logging.debug("Peaks: %s", peaks)
 
     # Discard first 5 peaks
     peaks = peaks[5:]
@@ -148,6 +150,7 @@ def get_bits(peaks):
 
 def get_bytes(bits, width=5):
     bits = list(bits)
+    logging.debug("Bits: %s", bits)
     if not bits:
         raise DecodeError("No bits were found. Bad swipe or microphone level is wrong?")
 
@@ -157,8 +160,19 @@ def get_bytes(bits, width=5):
 
     while 1:
         byte, bits = bits[:width], bits[width:]
-        if len(byte) < width or sum(byte) % 2 != 1:
+        if len(byte) < width:
+            logger.debug("End of bits: %d left", len(byte))
             return
+        if sum(byte) % 2 != 1:
+            logger.debug(
+                "End of bits: checksum failed (%s), %d bits left", repr(byte), len(bits)
+            )
+            remaining = [byte]
+            for i in range(0, len(bits), width):
+                remaining.append(bits[i : i + width])
+            pprint(remaining)
+            # TODO: normally return here...
+            # return
         yield byte
 
 
@@ -168,7 +182,7 @@ def bcd_chr(byte):
 
 def get_bcd_chars(bytes):
     bytes = list(bytes)
-    logging.debug(bytes)
+    logging.debug("Bytes: %s", bytes)
 
     if bcd_chr(bytes[0]) != ";":
         # Try reversed
@@ -180,11 +194,13 @@ def get_bcd_chars(bytes):
     if bcd_chr(start) != ";":
         raise DecodeError("No start sentinal")
 
+    debug_chars = [bcd_chr(start)]
     lrc = start
     try:
         while 1:
             byte = next(ibytes)
             char = bcd_chr(byte)
+            debug_chars.append(char)
 
             for i in range(len(lrc) - 1):
                 lrc[i] = (lrc[i] + byte[i]) % 2
@@ -198,6 +214,9 @@ def get_bcd_chars(bytes):
 
             yield char
 
+    except DecodeError:
+        logger.debug("Chars: %s", "".join(debug_chars))
+        raise
     except StopIteration:
         raise DecodeError("No end sentinal")
 
