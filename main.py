@@ -1,12 +1,49 @@
 #!/usr/bin/env python3
 
 import audioop
-import ossaudiodev
 from collections import deque
+import pyaudio
 
 THRESHOLD_FACTOR = 3.5
 FIRST_PEAK_FACTOR = 0.8
 SECOND_PEAK_FACTOR = 0.5
+
+
+def get_oss_audio_device(dev="/dev/audio"):
+    """Get the ossaudiodev."""
+    try:
+        import ossaudiodev
+
+        audio = ossaudiodev.open(dev, "r")
+        audio.setparameters(ossaudiodev.AFMT_S16_LE, 1, 44100)
+        return audio
+    except Exception:
+        raise RuntimeError("Failed to open OSS audio device.")
+
+
+class OsxAudio:
+    def __init__(self):
+        self.p = pyaudio.PyAudio()
+        self.stream = None
+
+    def __enter__(self):
+        # input_device_index – Index of Input Device to use. Unspecified (or
+        # None) uses default device. Ignored if input is False.
+        self.stream = self.p.open(
+            format=pyaudio.paInt16,
+            channels=1,
+            rate=44100,
+            input=True,
+            frames_per_buffer=10000,
+        )
+        return self.stream
+
+    def __exit__(self, *args, **kwargs):
+        if not self.stream:
+            return
+        self.stream.stop_stream()
+        self.stream.close()
+        self.p.terminate()
 
 
 def get_chunk(src, bias):
@@ -14,10 +51,8 @@ def get_chunk(src, bias):
     return data, audioop.maxpp(data, 2)
 
 
-def get_swipe(dev="/dev/audio"):
-    audio = ossaudiodev.open(dev, "r")
-    audio.setparameters(ossaudiodev.AFMT_S16_LE, 1, 44100)
-
+def get_swipe(audio):
+    print("READY")
     baselines = deque([2 ** 15] * 4)
     bias = 0
     old_data = b""
@@ -159,9 +194,24 @@ class DecodeError(Exception):
     pass
 
 
+def get_data_from_linux():
+    return get_swipe(get_oss_audio_device())
+
+
+def get_data_from_osx():
+    with OsxAudio() as audio:
+        return get_swipe(audio)
+
+
+def get_data_from_wav_file(filename="output.wav"):
+    with open("capitalone.pcm", "rb") as f:
+        return f.read()
+
+
 if __name__ == "__main__":
-    print("READY")
-    data = get_swipe()
+    # data = get_data_from_linux()
+    data = get_data_from_osx()
+    # data = get_data_from_wav_file()
     peaks = list(get_peaks(data))
     bits = list(get_bits(peaks))
     bytes = list(get_bytes(bits))
